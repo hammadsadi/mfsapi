@@ -3,7 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 const cookieParser = require("cookie-parser");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 // Init Express
 const app = express();
@@ -14,7 +14,7 @@ app.use(express.json());
 // init Cors
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173", "https://mfs-sadi.netlify.app"],
     credentials: true,
   })
 );
@@ -22,30 +22,6 @@ app.use(cookieParser());
 
 // Init PORT
 const PORT = process.env.PORT || 8000;
-
-// const tokenVerify = (req, res, next) => {
-//   try {
-//     const token = req.cookies.token;
-//     if (!token) {
-//       return res.status(401).send("Unauthorized Access");
-//     }
-//     next();
-//     if (token) {
-//       jwt.verify(token, process.env.SCREET_KEY, (err, decode) => {
-//         if (err) {
-//           console.log(err);
-//           return res.status(401).send("Unauthorized Access");
-//         }
-//         req.user = decode;
-//         next();
-//       });
-//     }
-
-//     next();
-//   } catch (error) {
-//     console.log(error);
-//   }
-// };
 
 // Token Verify
 const tokenVerify = (req, res, next) => {
@@ -123,11 +99,7 @@ async function run() {
 
       // Token Genarate
       const UserCrendential = { email: userInfo?.numberAndEmail };
-      // const token = jwt.sign(
-      //   { email: userInfo?.numberAndEmail },
-      //   process.env.SCREET_KEY,
-      //   { expiresIn: "1h" }
-      // );
+
       const token = jwt.sign(UserCrendential, process.env.SCREET_KEY, {
         expiresIn: "1h",
       });
@@ -174,13 +146,87 @@ async function run() {
       res.send(loggedUser);
     });
 
+    /**
+     * Admin Related API
+     */
     // Get All User
     app.get("/users/all", tokenVerify, async (req, res) => {
-      console.log(req.user);
       const users = await userCollection.find().toArray();
       res.send(users);
     });
 
+    // Get Admin
+    app.get("/admin/:email", tokenVerify, async (req, res) => {
+      const { email } = req.params;
+      if (req.user.email !== email) {
+        return res.status(403).json({ message: "Unauthorized Access" });
+      }
+      const user = await userCollection.findOne({ email: email });
+      let admin = false;
+      if (user) {
+        admin = user.accountType === "admin";
+      }
+
+      res.send(admin);
+    });
+    // Get Agent
+    app.get("/agent/:email", tokenVerify, async (req, res) => {
+      const { email } = req.params;
+      if (req.user.email !== email) {
+        return res.status(403).json({ message: "Unauthorized Access" });
+      }
+      const user = await userCollection.findOne({ email: email });
+      let agent = false;
+      if (user) {
+        agent = user.accountType === "agent";
+      }
+
+      res.send(agent);
+    });
+
+    /**
+     * User Related Api
+     */
+
+    // Update User Account Status
+    app.put("/users/status/:id", tokenVerify, async (req, res) => {
+      const id = req.params.id;
+      const { status, balance, prevStatus } = req.body;
+      const query = { _id: new ObjectId(id) };
+      if (status == "active" && prevStatus == "pending") {
+        const updateDoc = {
+          $set: {
+            status: "active",
+            balance: 40,
+          },
+        };
+
+        const users = await userCollection.updateOne(query, updateDoc);
+        res.send(users);
+      }
+      if (status == "block") {
+        const updateDoc = {
+          $set: {
+            status: "block",
+            balance,
+          },
+        };
+
+        const users = await userCollection.updateOne(query, updateDoc);
+        res.send(users);
+      }
+      if (status == "active" && prevStatus == "block") {
+        const updateDoc = {
+          $set: {
+            status: "active",
+            balance,
+          },
+        };
+
+        const users = await userCollection.updateOne(query, updateDoc);
+        res.send(users);
+      }
+    });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
