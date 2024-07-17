@@ -54,6 +54,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const userCollection = client.db("mfsDB").collection("users");
+    const sendMoneyCollection = client.db("mfsDB").collection("sendMoneys");
 
     // Create User
     app.post("/user", async (req, res) => {
@@ -227,6 +228,52 @@ async function run() {
         res.send(users);
       }
     });
+
+    // Send Money
+    app.post("/send-money", tokenVerify, async (req, res) => {
+      const transactionInfo = req.body;
+
+      const findReciver = await userCollection.findOne({
+        mobile: transactionInfo?.receiverMobile,
+      });
+
+      // Check Reciver
+      if (!findReciver) return res.send({ error: "Receiver Not Found" });
+
+      // Match Password
+      const checkPass = bcrypt.compareSync(
+        transactionInfo?.pin,
+        findReciver.pin
+      );
+      if (!checkPass) {
+        return res.send({ error: "Wrong PIN" });
+      }
+
+      // Success Money
+      const successMoney = await sendMoneyCollection.insertOne({
+        ...transactionInfo,
+        pin: null,
+      });
+
+      // Update Sender Money
+      const senderSuccessMoney = await userCollection.updateOne(
+        {
+          email: transactionInfo?.senderInfo?.email,
+        },
+        { $inc: { balance: -transactionInfo.amount } }
+      );
+
+      // Update Sender Money
+      const ReciverSuccessMoney = await userCollection.updateOne(
+        {
+          mobile: transactionInfo?.receiverMobile,
+        },
+        { $inc: { balance: +transactionInfo.amount } }
+      );
+
+      res.send({ message: "Send Money Success Completed" });
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
