@@ -274,6 +274,13 @@ async function run() {
       res.send({ message: "Send Money Success Completed" });
     });
 
+    // Get All Transaction
+    app.get("/all-user-transaction", tokenVerify, async (req, res) => {
+      const findReciver = await sendMoneyCollection.find().toArray();
+
+      res.send(findReciver);
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
